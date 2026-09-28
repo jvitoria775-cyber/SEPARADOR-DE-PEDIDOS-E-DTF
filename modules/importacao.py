@@ -54,20 +54,59 @@ def encontrar_coluna(df_columns: list, possiveis: list) -> str | None:
     return None
 
 
+def carregar_planilha(uploaded_file) -> pd.DataFrame:
+    """Carrega arquivo XLSX, XLS ou CSV/TXT tentando múltiplos formatos e encodings."""
+    nome = uploaded_file.name.lower()
+
+    # 1. Se for explicitamente Excel
+    if nome.endswith('.xlsx') or nome.endswith('.xls'):
+        try:
+            uploaded_file.seek(0)
+            return pd.read_excel(uploaded_file)
+        except Exception:
+            uploaded_file.seek(0)
+
+    # 2. Tentar como CSV com múltiplos encodings e separadores
+    encodings = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252', 'iso-8859-1']
+    delimiters = [',', ';', '\t', '|']
+
+    for enc in encodings:
+        for sep in delimiters:
+            try:
+                uploaded_file.seek(0)
+                df = pd.read_csv(uploaded_file, sep=sep, encoding=enc)
+                # Verifica se encontrou mais de uma coluna (evita separador errado)
+                if len(df.columns) > 1 and len(df) > 0:
+                    return df
+            except Exception:
+                continue
+
+    # 3. Tentar como Excel caso a extensão esteja oculta ou trocada
+    try:
+        uploaded_file.seek(0)
+        return pd.read_excel(uploaded_file)
+    except Exception:
+        pass
+
+    # 4. Tentativa final como CSV com auto-detecção
+    uploaded_file.seek(0)
+    return pd.read_csv(uploaded_file, sep=None, engine='python', encoding='latin1')
+
+
 def render():
     """Renderiza a página de importação de pedidos."""
     st.header("📦 Importação de Pedidos")
-    st.caption("Faça upload da planilha de pedidos do UpSeller (formato .xlsx)")
+    st.caption("Faça upload da planilha exportada do UpSeller (XLSX, XLS ou CSV)")
 
     uploaded_file = st.file_uploader(
-        "Selecione a planilha XLSX",
-        type=["xlsx", "xls"],
-        help="Planilha exportada do UpSeller com os pedidos do dia/lote"
+        "Selecione o arquivo de pedidos (XLSX ou CSV)",
+        type=["xlsx", "xls", "csv", "txt"],
+        help="Planilha exportada do UpSeller com os pedidos do dia/lote (funciona com Excel ou CSV)"
     )
 
     if uploaded_file is not None:
         try:
-            df = pd.read_excel(uploaded_file)
+            df = carregar_planilha(uploaded_file)
             st.success(f"✅ Planilha carregada: {len(df)} linhas encontradas")
 
             # Mapear colunas

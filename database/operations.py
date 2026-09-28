@@ -208,13 +208,14 @@ def listar_modelos_associacao() -> list:
     conn.close()
 
     modelos = {}
-    for r in rows:
+    for row in rows:
+        r = dict(row)
         chave = r['chave_anuncio']
         if chave not in modelos:
             modelos[chave] = {
                 'chave': chave,
                 'titulo_referencia': r.get('titulo_referencia') or chave,
-                'link_imagem': r['link_imagem'] or '',
+                'link_imagem': r.get('link_imagem') or '',
                 'itens': []
             }
         modelos[chave]['itens'].append({
@@ -246,8 +247,9 @@ def clonar_associacao(chave_origem: str, chave_destino: str, link_imagem: str = 
         "SELECT * FROM associacoes WHERE chave_anuncio = ?", (chave_origem,)
     ).fetchall()
 
-    for o in origens:
-        img = o['link_imagem'] or link_imagem
+    for orig in origens:
+        o = dict(orig)
+        img = o.get('link_imagem') or link_imagem
         titulo_ref = o.get('titulo_referencia') or chave_origem
         conn.execute(
             """INSERT INTO associacoes 
