@@ -7,7 +7,16 @@ DB_PATH = os.path.join(
     "data", "pedidos.db"
 )
 
-TAMANHOS_ORDEM = ["P", "M", "G", "GG", "G1", "G2", "G3", "G4", "G5"]
+TAMANHOS_ORDEM = [
+    # Infantil / Bebê
+    "RN", "BB", "0", "1", "2", "3", "4", "6", "8", "10", "12", "14", "16",
+    # Adulto
+    "PP", "P", "M", "G", "GG", "XG", "XXG",
+    # Plus Size
+    "G1", "G2", "G3", "G4", "G5", "G6", "G7",
+    # Outros
+    "ÚNICO"
+]
 
 
 def get_connection():

@@ -99,7 +99,7 @@ def render():
                 # Opção rápida: Vincular a um produto/anúncio já existente
                 if modelos_existentes:
                     with st.expander("⚡ **Vincular ao mesmo produto de um anúncio já cadastrado**", expanded=True):
-                        st.caption("Escolha um anúncio já cadastrado que use as mesmas peças/DTF:")
+                        st.caption("Escolha um anúncio já cadastrado que use a mesma composição de peças:")
                         col_sel, col_btn = st.columns([3, 1])
                         with col_sel:
                             modelo_escolhido = st.selectbox(
@@ -175,13 +175,6 @@ def render():
                             'quantidade': qtd
                         })
 
-                    titulo_ref_custom = st.text_input(
-                        "🏷️ Nome da Estampa / Título de Referência (para unificar no DTF)",
-                        value=item.get('titulo_anuncio', ''),
-                        key=f"ref_input_{idx}",
-                        help="Títulos diferentes vinculados a esta mesma estampa serão somados juntos na lista DTF"
-                    )
-
                     if st.button("💾 Salvar Nova Associação", key=f"btn_assoc_{idx}", type="primary", use_container_width=True):
                         db.excluir_associacoes_por_chave(chave)
 
@@ -192,8 +185,7 @@ def render():
                                 cor=kit_item['cor'],
                                 tamanho=kit_item['tamanho'],
                                 quantidade=kit_item['quantidade'],
-                                link_imagem=item.get('link_imagem', ''),
-                                titulo_referencia=titulo_ref_custom
+                                link_imagem=item.get('link_imagem', '')
                             )
 
                         db.marcar_itens_associados(lote_id, chave)

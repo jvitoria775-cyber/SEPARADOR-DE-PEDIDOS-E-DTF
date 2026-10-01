@@ -42,8 +42,7 @@ def render():
     for lote in todos_lotes:
         dtf_existente = db.listar_dtf_producao(lote['id'])
         itens_lote = db.listar_itens_lote(lote['id'])
-        tem_associados = any(i['associado'] for i in itens_lote)
-        if not dtf_existente and tem_associados:
+        if not dtf_existente and len(itens_lote) > 0:
             lotes_sem_dtf.append(lote)
 
     if lotes_sem_dtf:
@@ -55,10 +54,10 @@ def render():
                           type="primary", use_container_width=True):
                 itens = db.adicionar_dtf_de_lote(lote['id'])
                 if itens:
-                    st.success(f"✅ {len(itens)} estampas adicionadas!")
+                    st.success(f"✅ {len(itens)} estampas adicionadas à produção!")
                     st.rerun()
                 else:
-                    st.warning("Nenhum item associado encontrado.")
+                    st.warning("Nenhum pedido encontrado neste lote.")
         st.divider()
 
     # Lista DTF global — apenas NÃO impressos
@@ -99,10 +98,10 @@ def render():
 
                 with col_info:
                     st.markdown(f"**{item['titulo_estampa']}**")
-                    st.caption(f"Produto: {item['produto_base']} | Cor: {item['cor']}")
+                    st.caption(f"Variação: {item['cor']}")
 
                 with col_qtd:
-                    st.metric("Qtd", item['quantidade'])
+                    st.metric("Qtd DTF", item['quantidade'], help="Quantidade total de vendas do anúncio na planilha")
 
                 with col_btn:
                     if st.button("✅ Impresso", key=f"imp_{idx}", use_container_width=True):

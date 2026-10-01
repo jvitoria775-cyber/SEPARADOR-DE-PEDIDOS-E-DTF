@@ -15,11 +15,20 @@ def normalizar_chave(titulo: str, variacao: str = "") -> str:
 
 
 def ordem_tamanho(tamanho: str) -> int:
-    """Retorna a ordem numérica de um tamanho para ordenação."""
-    try:
-        return TAMANHOS_ORDEM.index(tamanho.upper().strip())
-    except ValueError:
-        return 999
+    """Retorna a ordem numérica de um tamanho para ordenação lógica.
+    Infantil (RN, 1, 2, 4...) vem antes de Adulto (PP, P, M, G...).
+    """
+    t = (tamanho or '').upper().strip()
+    if t in TAMANHOS_ORDEM:
+        return TAMANHOS_ORDEM.index(t)
+
+    # Se for apenas dígitos (ex: "2", "4", "6", "10", "14")
+    num_match = re.match(r'^(\d+)', t)
+    if num_match:
+        # Tamanhos numéricos infantis
+        return int(num_match.group(1))
+
+    return 999
 
 
 # ============================================================
@@ -118,6 +127,35 @@ def listar_tamanhos(produto_base_id: int) -> list:
     ).fetchall()
     conn.close()
     return [r['tamanho'] for r in rows]
+
+
+def adicionar_tamanho(produto_base_id: int, tamanho: str):
+    """Adiciona um tamanho individual a um produto base."""
+    t = tamanho.upper().strip()
+    if not t:
+        return
+    ordem = ordem_tamanho(t)
+    conn = get_connection()
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO tamanhos_produto (produto_base_id, tamanho, ordem)
+               VALUES (?, ?, ?)""",
+            (produto_base_id, t, ordem)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def excluir_tamanho(produto_base_id: int, tamanho: str):
+    """Remove um tamanho específico de um produto base."""
+    conn = get_connection()
+    conn.execute(
+        "DELETE FROM tamanhos_produto WHERE produto_base_id = ? AND tamanho = ?",
+        (produto_base_id, tamanho.upper().strip())
+    )
+    conn.commit()
+    conn.close()
 
 
 # ============================================================
@@ -446,44 +484,46 @@ def reassociar_itens_lote(lote_id: int):
 # ============================================================
 
 def gerar_lista_dtf(lote_id: int) -> list:
-    """Gera lista de produção DTF com base nos itens associados do lote,
-    unificando anúncios com títulos diferentes que apontam para a mesma estampa de referência.
+    """Gera lista de produção DTF com base nas vendas reais do lote.
+    A quantidade de DTF é estritamente a QUANTIDADE DE VENDA do anúncio na planilha,
+    totalmente desvinculada da quantidade de peças físicas dos kits.
+    Ex: 1 venda de Kit 3 Shorts = 1 DTF (ou 2 se o cliente comprou 2 kits).
     """
     itens = listar_itens_lote(lote_id)
-    producao = {}  # chave: (titulo_estampa_lower, produto_base_lower, cor_lower)
+    producao = {}  # chave: (titulo_lower, cor_lower)
 
+    conn = get_connection()
     for item in itens:
-        if not item['associado']:
-            continue
-        assocs = buscar_associacoes(item['chave_anuncio'])
-        for assoc in assocs:
-            # Título unificado da estampa
-            titulo_unificado = (
-                assoc.get('titulo_referencia')
-                or assoc.get('chave_anuncio')
-                or item.get('titulo_anuncio')
-                or ''
-            ).strip()
+        titulo = (item.get('titulo_anuncio') or 'Sem título').strip()
+        cor_ou_var = (item.get('variacao') or 'PADRÃO').strip()
+        link_img = item.get('link_imagem') or ''
+        qtd_venda = int(item.get('quantidade') or 1)
+        chave_item = item.get('chave_anuncio', '')
 
-            # Imagem de referência da estampa
-            img_unificada = assoc.get('link_imagem') or item.get('link_imagem', '')
+        # Se houver alias/unificação cadastrada, usa o título principal
+        alias = conn.execute(
+            "SELECT chave_principal FROM aliases WHERE titulo_variante = ?",
+            (chave_item,)
+        ).fetchone()
 
-            chave_dtf = (
-                titulo_unificado.lower(),
-                assoc['produto_nome'].strip().lower(),
-                assoc['cor'].strip().lower()
-            )
+        titulo_estampa = titulo
+        if alias and alias['chave_principal']:
+            # Pega o título principal limpo
+            titulo_estampa = alias['chave_principal'].split('|')[0].strip().title()
 
-            if chave_dtf not in producao:
-                producao[chave_dtf] = {
-                    'titulo_estampa': titulo_unificado,
-                    'produto_base': assoc['produto_nome'],
-                    'cor': assoc['cor'],
-                    'quantidade': 0,
-                    'link_imagem': img_unificada,
-                }
-            producao[chave_dtf]['quantidade'] += assoc['quantidade'] * item['quantidade']
+        chave_dtf = (titulo_estampa.lower(), cor_ou_var.lower())
 
+        if chave_dtf not in producao:
+            producao[chave_dtf] = {
+                'titulo_estampa': titulo_estampa,
+                'produto_base': 'DTF',
+                'cor': cor_ou_var,
+                'quantidade': 0,
+                'link_imagem': link_img,
+            }
+        producao[chave_dtf]['quantidade'] += qtd_venda
+
+    conn.close()
     return list(producao.values())
 
 
