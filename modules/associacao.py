@@ -53,7 +53,7 @@ def render():
             lote_selecionado = st.selectbox(
                 "Lotes com pendências",
                 options=lotes_com_pendencias,
-                format_func=lambda x: f"📦 {x['nome']} ({x['data_importacao']})",
+                format_func=lambda x: f"📦 {x['nome']} ({db.formatar_data_brasil(x['data_importacao'])})",
                 key="lote_assoc"
             )
 
@@ -62,9 +62,6 @@ def render():
 
         lote_id = lote_selecionado['id']
         pendentes = db.itens_nao_associados(lote_id)
-
-        # Buscar modelos já existentes para permitir vínculo com 1 clique
-        modelos_existentes = db.listar_modelos_associacao()
 
         with col_info:
             total_itens_pend = sum(p.get('total_pedidos', 1) for p in pendentes)
@@ -96,36 +93,8 @@ def render():
                     detalhes.append(f"📦 **{pedidos_cnt} pedido(s)** ({pecas_cnt} peças)")
                     st.caption(" • ".join(detalhes))
 
-                # Opção rápida: Vincular a um produto/anúncio já existente
-                if modelos_existentes:
-                    with st.expander("⚡ **Vincular ao mesmo produto de um anúncio já cadastrado**", expanded=True):
-                        st.caption("Escolha um anúncio já cadastrado que use a mesma composição de peças:")
-                        col_sel, col_btn = st.columns([3, 1])
-                        with col_sel:
-                            modelo_escolhido = st.selectbox(
-                                "Produto já cadastrado",
-                                options=modelos_existentes,
-                                format_func=lambda m: f"🎯 {m['chave'][:40]}... ➔ {m['resumo']}",
-                                key=f"sel_modelo_{idx}"
-                            )
-                        with col_btn:
-                            st.write("")
-                            if st.button("🔗 Vincular", key=f"btn_vincular_{idx}", type="primary", use_container_width=True):
-                                if modelo_escolhido:
-                                    db.clonar_associacao(
-                                        chave_origem=modelo_escolhido['chave'],
-                                        chave_destino=chave,
-                                        link_imagem=item.get('link_imagem', '')
-                                    )
-                                    db.marcar_itens_associados(lote_id, chave)
-                                    # Atualiza todos os lotes
-                                    for l in db.listar_lotes():
-                                        db.reassociar_itens_lote(l['id'])
-                                    st.success("✅ Vinculado com sucesso!")
-                                    st.rerun()
-
-                # Opção manual: Montar novo produto ou kit
-                with st.expander("✏️ **Ou montar nova composição (novo produto ou kit)**", expanded=(not bool(modelos_existentes))):
+                # Montar composição: produto ou kit
+                with st.expander("✏️ **Montar composição de peças (produto ou kit)**", expanded=True):
                     n_itens = st.number_input(
                         "Quantas peças compõem este anúncio/kit?",
                         min_value=1, max_value=20, value=1,

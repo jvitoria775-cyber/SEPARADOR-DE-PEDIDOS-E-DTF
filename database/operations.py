@@ -1,11 +1,37 @@
-"""Operações CRUD para o banco de dados."""
 import re
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    FUSO_BRASILIA = timezone(timedelta(hours=-3))
 from .models import get_connection, TAMANHOS_ORDEM
 
 
 # ============================================================
 # UTILIDADES
 # ============================================================
+
+def obter_hora_brasil() -> datetime:
+    """Retorna o datetime atual no fuso horário oficial de Brasília (UTC-3)."""
+    return datetime.now(FUSO_BRASILIA)
+
+
+def formatar_data_brasil(data_str: str) -> str:
+    """Converte string de data para formato brasileiro legível (DD/MM/AAAA HH:MM:SS)."""
+    if not data_str:
+        return ""
+    try:
+        limpa = str(data_str).split('.')[0].replace('T', ' ').replace('Z', '')
+        dt = datetime.strptime(limpa, '%Y-%m-%d %H:%M:%S')
+        return dt.strftime('%d/%m/%Y %H:%M:%S')
+    except Exception:
+        try:
+            dt = datetime.fromisoformat(str(data_str).replace('Z', ''))
+            return dt.strftime('%d/%m/%Y %H:%M:%S')
+        except Exception:
+            return str(data_str)
+
 
 def normalizar_chave(titulo: str, variacao: str = "") -> str:
     """Gera chave normalizada a partir do título + variação."""
@@ -339,14 +365,74 @@ def excluir_alias(alias_id: int):
 
 def criar_lote(nome: str, arquivo_original: str = None) -> int:
     conn = get_connection()
+    data_importacao = obter_hora_brasil().strftime('%Y-%m-%d %H:%M:%S')
     cursor = conn.execute(
-        "INSERT INTO lotes_importacao (nome, arquivo_original) VALUES (?, ?)",
-        (nome, arquivo_original)
+        "INSERT INTO lotes_importacao (nome, arquivo_original, data_importacao) VALUES (?, ?, ?)",
+        (nome, arquivo_original, data_importacao)
     )
     conn.commit()
     lote_id = cursor.lastrowid
     conn.close()
     return lote_id
+
+
+def atualizar_nome_lote(lote_id: int, novo_nome: str):
+    """Atualiza o nome de um lote existente."""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE lotes_importacao SET nome = ? WHERE id = ?",
+        (novo_nome.strip(), lote_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def excluir_lote(lote_id: int):
+    """Exclui um lote e seus dados vinculados (itens e DTF)."""
+    conn = get_connection()
+    conn.execute("DELETE FROM dtf_producao WHERE lote_id = ?", (lote_id,))
+    conn.execute("DELETE FROM itens_pedido WHERE lote_id = ?", (lote_id,))
+    conn.execute("DELETE FROM lotes_importacao WHERE id = ?", (lote_id,))
+    conn.commit()
+    conn.close()
+
+
+def corrigir_fuso_lotes():
+    """Ajusta em -3h os nomes e datas de importação de lotes que foram gravados com horário UTC."""
+    conn = get_connection()
+    rows = conn.execute("SELECT id, nome, data_importacao FROM lotes_importacao").fetchall()
+    for row in rows:
+        lid = row['id']
+        nome = str(row['nome'] or '')
+        data_imp = str(row['data_importacao'] or '')
+
+        nova_data_imp = data_imp
+        try:
+            if data_imp:
+                limpa_data = data_imp.split('.')[0]
+                dt = datetime.strptime(limpa_data, '%Y-%m-%d %H:%M:%S')
+                nova_data_imp = (dt - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception:
+            pass
+
+        novo_nome = nome
+        try:
+            match = re.search(r'(\d{2}/\d{2}/\d{4})\s+(\d{2}):(\d{2})', nome)
+            if match:
+                dt_str = f"{match.group(1)} {match.group(2)}:{match.group(3)}"
+                dt_obj = datetime.strptime(dt_str, '%d/%m/%Y %H:%M')
+                novo_horario_str = (dt_obj - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M')
+                novo_nome = re.sub(r'\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}', novo_horario_str, nome)
+        except Exception:
+            pass
+
+        if novo_nome != nome or nova_data_imp != data_imp:
+            conn.execute(
+                "UPDATE lotes_importacao SET nome = ?, data_importacao = ? WHERE id = ?",
+                (novo_nome, nova_data_imp, lid)
+            )
+    conn.commit()
+    conn.close()
 
 
 def listar_lotes() -> list:

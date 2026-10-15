@@ -45,7 +45,7 @@ def render():
     lote_selecionado = st.selectbox(
         "Selecione o Lote",
         options=lotes_ativos,
-        format_func=lambda x: f"📦 {x['nome']} ({x['data_importacao']})",
+        format_func=lambda x: f"📦 {x['nome']} ({db.formatar_data_brasil(x['data_importacao'])})",
         key="lote_sep"
     )
 

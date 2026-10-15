@@ -200,8 +200,8 @@ def render():
             st.divider()
             nome_lote = st.text_input(
                 "Nome do Lote",
-                value=f"Lote {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-                help="Identificação do lote para referência futura"
+                value=f"Lote {db.obter_hora_brasil().strftime('%d/%m/%Y %H:%M')}",
+                help="Identificação do lote para referência futura (Horário oficial de Brasília)"
             )
 
             if st.button("🚀 Importar Pedidos", type="primary", use_container_width=True):
@@ -247,16 +247,47 @@ def render():
 
     # ------ Lotes importados ------
     st.divider()
-    st.subheader("📁 Lotes Importados")
+    col_sub, col_btn_corr = st.columns([3, 2])
+    with col_sub:
+        st.subheader("📁 Lotes Importados")
+    with col_btn_corr:
+        if st.button("🕒 Corrigir Fuso dos Lotes (-3h Brasília)", help="Ajusta o horário dos lotes que foram criados no fuso UTC para o horário oficial de Brasília", use_container_width=True):
+            db.corrigir_fuso_lotes()
+            st.success("✅ Horários dos lotes atualizados para o horário de Brasília!")
+            st.rerun()
+
     lotes = db.listar_lotes()
 
     if lotes:
         for lote in lotes:
             itens = db.listar_itens_lote(lote['id'])
             n_associados = sum(1 for i in itens if i['associado'])
+            data_formatada = db.formatar_data_brasil(lote['data_importacao'])
             with st.expander(
-                f"📂 {lote['nome']} — {len(itens)} itens ({n_associados} associados) — {lote['data_importacao']}"
+                f"📂 {lote['nome']} — {len(itens)} itens ({n_associados} associados) — {data_formatada}"
             ):
+                # Ações de edição e exclusão do lote
+                c_edit, c_salvar, c_del = st.columns([4, 1.2, 1.2])
+                with c_edit:
+                    novo_nome = st.text_input(
+                        "Nome do lote",
+                        value=lote['nome'],
+                        key=f"edit_nome_{lote['id']}",
+                        label_visibility="collapsed"
+                    )
+                with c_salvar:
+                    if st.button("💾 Salvar", key=f"btn_salvar_{lote['id']}", use_container_width=True, help="Salvar novo nome do lote"):
+                        if novo_nome.strip():
+                            db.atualizar_nome_lote(lote['id'], novo_nome)
+                            st.success("Nome atualizado!")
+                            st.rerun()
+                with c_del:
+                    if st.button("🗑️ Excluir", key=f"btn_del_lote_{lote['id']}", use_container_width=True, help="Excluir este lote e todos os seus pedidos"):
+                        db.excluir_lote(lote['id'])
+                        st.success("Lote excluído com sucesso!")
+                        st.rerun()
+
+                st.divider()
                 for item in itens[:10]:
                     status = "✅" if item['associado'] else "⚠️"
                     st.write(f"{status} Pedido {item['numero_pedido']}: {item['titulo_anuncio']} ({item['variacao']}) x{item['quantidade']}")
