@@ -93,25 +93,38 @@ class PostgresConnectionWrapper:
         self._conn.close()
 
 
+DB_STATUS = {
+    "type": "desconhecido",
+    "error": None,
+    "host": None
+}
+
+
 def get_connection():
     """Retorna conexão com o banco de dados (Supabase PostgreSQL ou SQLite local como fallback)."""
+    global DB_STATUS
     if HAS_PSYCOPG2:
+        db_url = None
         try:
-            db_url = None
-            try:
-                import streamlit as st
-                db_url = st.secrets.get("DATABASE_URL")
-            except Exception:
-                pass
+            import streamlit as st
+            db_url = st.secrets.get("DATABASE_URL")
+        except Exception:
+            pass
 
-            if not db_url:
-                db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            db_url = os.environ.get("DATABASE_URL")
 
+        try:
             if db_url:
                 raw_conn = psycopg2.connect(db_url, sslmode='require', connect_timeout=5)
+                DB_STATUS["type"] = "supabase"
+                DB_STATUS["error"] = None
+                DB_STATUS["host"] = "Supabase (URL)"
+                return PostgresConnectionWrapper(raw_conn)
             else:
+                host = os.environ.get("SUPABASE_HOST", "db.pjnzxizkbtclarvfryue.supabase.co")
                 raw_conn = psycopg2.connect(
-                    host=os.environ.get("SUPABASE_HOST", "db.pjnzxizkbtclarvfryue.supabase.co"),
+                    host=host,
                     port=int(os.environ.get("SUPABASE_PORT", 5432)),
                     user=os.environ.get("SUPABASE_USER", "postgres"),
                     password=os.environ.get("SUPABASE_PASSWORD", "#Familia0522"),
@@ -119,9 +132,18 @@ def get_connection():
                     sslmode='require',
                     connect_timeout=5
                 )
-            return PostgresConnectionWrapper(raw_conn)
-        except Exception:
-            pass  # Fallback para SQLite se falhar a conexão remota
+                DB_STATUS["type"] = "supabase"
+                DB_STATUS["error"] = None
+                DB_STATUS["host"] = host
+                return PostgresConnectionWrapper(raw_conn)
+        except Exception as e:
+            DB_STATUS["type"] = "sqlite"
+            DB_STATUS["error"] = str(e)
+            DB_STATUS["host"] = "SQLite Local (Contingência)"
+    else:
+        DB_STATUS["type"] = "sqlite"
+        DB_STATUS["error"] = "Biblioteca psycopg2 não instalada"
+        DB_STATUS["host"] = "SQLite Local"
 
     # Conexão SQLite local de contingência
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)

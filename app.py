@@ -69,6 +69,16 @@ st.markdown("""
 with st.sidebar:
     st.image("assets/logo.png", width=120)
     st.caption("Sistema de Pedidos & Produção DTF")
+
+    # Indicador de conexão com o banco de dados
+    from database.models import DB_STATUS
+    if DB_STATUS.get("type") == "supabase":
+        st.success("🟢 **Supabase (Nuvem)**")
+    else:
+        st.error("⚠️ **SQLite (Modo Temporário)**")
+        if DB_STATUS.get("error"):
+            st.caption(f"Motivo: {DB_STATUS['error']}")
+
     st.divider()
 
     pagina = st.radio(
